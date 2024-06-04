@@ -10,9 +10,11 @@ import (
 const GetScreenShotEndpoint = "/screenshot"
 
 type GetScreenShotQuery struct {
-	URL    string `form:"url" binding:"required"`
-	Width  int    `form:"width" binding:"required"`
-	Height int    `form:"height" binding:"required"`
+	URL         string `form:"url" binding:"required"`
+	Width       int    `form:"width" binding:"required"`
+	Height      int    `form:"height" binding:"required"`
+	ImageWidth  int    `form:"image_width" binding:"required"`
+	ImageHeight int    `form:"image_height" binding:"required"`
 }
 
 func GetScreenShot(c *gin.Context) {
@@ -22,11 +24,11 @@ func GetScreenShot(c *gin.Context) {
 		return
 	}
 
-	data, err := screenshotservice.ScreenShot(query.URL, query.Width, query.Height)
+	data, err := screenshotservice.ScreenShot(query.URL, query.Width, query.Height, query.ImageWidth, query.ImageHeight)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
-	c.Data(http.StatusOK, "image/png", data)
+	c.Data(http.StatusOK, "image/webp", data)
 }
