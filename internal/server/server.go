@@ -2,11 +2,16 @@ package server
 
 import (
 	h "thumburl-service/internal/handler"
+	"thumburl-service/internal/service/screenshotservice"
 
 	"github.com/gin-gonic/gin"
 )
 
 func Start() {
+	if err := screenshotservice.InitPool(); err != nil {
+		panic(err)
+	}
+
 	r := gin.Default()
 
 	r.GET(h.GetScreenShotEndpoint, h.GetScreenShot)

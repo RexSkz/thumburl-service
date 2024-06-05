@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"thumburl-service/internal/service/imageservice"
 	"thumburl-service/internal/service/screenshotservice"
 
 	"github.com/gin-gonic/gin"
@@ -18,13 +19,19 @@ type GetScreenShotQuery struct {
 }
 
 func GetScreenShot(c *gin.Context) {
-	var query GetScreenShotQuery
-	if c.ShouldBindQuery(&query) != nil {
+	var req GetScreenShotQuery
+	if c.ShouldBindQuery(&req) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid query"})
 		return
 	}
 
-	data, err := screenshotservice.ScreenShot(query.URL, query.Width, query.Height, query.ImageWidth, query.ImageHeight)
+	data, err := screenshotservice.ScreenShot(req.URL, req.Width, req.Height)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	data, err = imageservice.ResizeWebp(data, req.ImageWidth, req.ImageHeight)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return

@@ -1,54 +1,36 @@
 package screenshotservice
 
 import (
-	"bytes"
-	"context"
-	"image"
-	"time"
+	"thumburl-service/internal/config"
+	"thumburl-service/internal/pkg/cdpagent"
 
-	"github.com/mafredri/cdp"
-	"github.com/mafredri/cdp/devtool"
 	"github.com/mafredri/cdp/protocol/browser"
 	"github.com/mafredri/cdp/protocol/css"
-	"github.com/mafredri/cdp/protocol/dom"
 	"github.com/mafredri/cdp/protocol/page"
-	"github.com/mafredri/cdp/rpcc"
-
-	"github.com/chai2010/webp"
-	"golang.org/x/image/draw"
 )
 
-const timeout = 10 * time.Second
+var pool *cdpagent.Pool
 
-func ScreenShot(
-	url string,
-	viewportWidth int,
-	viewportHeight int,
-	imageWidth int,
-	imageHeight int,
-) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+func InitPool() error {
+	p, err := cdpagent.InitPool(config.PoolConfig)
+	pool = p
+	return err
+}
 
-	devt := devtool.New("http://127.0.0.1:9222")
-	pt, err := devt.Get(ctx, devtool.Page)
-	if err != nil {
-		pt, err = devt.Create(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	conn, err := rpcc.DialContext(ctx, pt.WebSocketDebuggerURL)
+func ScreenShot(url string, width int, height int) ([]byte, error) {
+	agent, err := pool.GetAgent()
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer pool.ReleaseAgent(agent)
+	c := agent.Agent.Client
 
-	c := cdp.NewClient(conn)
+	ctx, cancel := agent.Agent.GetContext()
+	defer cancel()
+
 	c.Browser.SetWindowBounds(ctx, browser.NewSetWindowBoundsArgs(browser.WindowID(1), browser.Bounds{
-		Width:  &viewportWidth,
-		Height: &viewportHeight,
+		Width:  &width,
+		Height: &height,
 	}))
 
 	domContent, err := c.Page.DOMContentEventFired(ctx)
@@ -57,17 +39,11 @@ func ScreenShot(
 	}
 	defer domContent.Close()
 
-	if err = c.Page.Enable(ctx); err != nil {
-		return nil, err
-	}
-
 	frame, err := c.Page.Navigate(ctx, page.NewNavigateArgs(url))
 	if err != nil {
 		return nil, err
 	}
 
-	c.DOM.Enable(ctx, dom.NewEnableArgs())
-	c.CSS.Enable(ctx)
 	styleSheet, err := c.CSS.CreateStyleSheet(ctx, css.NewCreateStyleSheetArgs(frame.FrameID))
 	if err != nil {
 		return nil, err
@@ -85,34 +61,13 @@ func ScreenShot(
 	screenshot, err := c.Page.CaptureScreenshot(ctx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
 		X:      0,
 		Y:      0,
-		Width:  float64(viewportWidth),
-		Height: float64(viewportHeight),
+		Width:  float64(width),
+		Height: float64(height),
 		Scale:  1,
 	}))
 	if err != nil {
 		return nil, err
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(screenshot.Data))
-	if err != nil {
-		return nil, err
-	}
-	bounds := img.Bounds()
-	wRatio := float64(bounds.Dx()) / float64(imageWidth)
-	hRatio := float64(bounds.Dy()) / float64(imageHeight)
-	ratio := wRatio
-	if hRatio > wRatio {
-		ratio = hRatio
-	}
-	newWidth := int(float64(bounds.Dx()) / ratio)
-	newHeight := int(float64(bounds.Dy()) / ratio)
-	newImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-	draw.CatmullRom.Scale(newImg, newImg.Bounds(), img, bounds, draw.Over, nil)
-
-	result := new(bytes.Buffer)
-	if err = webp.Encode(result, newImg, &webp.Options{Quality: 90}); err != nil {
-		return nil, err
-	}
-
-	return result.Bytes(), nil
+	return screenshot.Data, nil
 }
