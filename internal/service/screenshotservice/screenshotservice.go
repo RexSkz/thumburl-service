@@ -1,6 +1,7 @@
 package screenshotservice
 
 import (
+	"context"
 	"thumburl-service/internal/config"
 	"thumburl-service/internal/pkg/cdpagent"
 
@@ -53,12 +54,15 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 		return nil, err
 	}
 
+	// wait until the DOM content is loaded, or timeout
 	select {
 	case <-domContent.Ready():
 	case <-ctx.Done():
 	}
 
-	screenshot, err := c.Page.CaptureScreenshot(ctx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
+	// use a new context to make sure the screenshot is taken even if
+	// the page is not fully loaded
+	screenshot, err := c.Page.CaptureScreenshot(context.Background(), page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
 		X:      0,
 		Y:      0,
 		Width:  float64(width),
