@@ -1,12 +1,11 @@
 package screenshotservice
 
 import (
-	"context"
 	"thumburl-service/internal/config"
 	"thumburl-service/internal/pkg/cdpagent"
 
-	"github.com/mafredri/cdp/protocol/browser"
 	"github.com/mafredri/cdp/protocol/css"
+	"github.com/mafredri/cdp/protocol/emulation"
 	"github.com/mafredri/cdp/protocol/page"
 )
 
@@ -18,6 +17,10 @@ func InitPool() error {
 	return err
 }
 
+func Dispose() {
+	pool.Dispose()
+}
+
 func ScreenShot(url string, width int, height int) ([]byte, error) {
 	agent, err := pool.GetAgent()
 	if err != nil {
@@ -26,13 +29,12 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	defer pool.ReleaseAgent(agent)
 	c := agent.Agent.Client
 
-	ctx, cancel := agent.Agent.GetContext()
+	ctx, cancel := agent.Agent.CreateContext()
 	defer cancel()
 
-	c.Browser.SetWindowBounds(ctx, browser.NewSetWindowBoundsArgs(browser.WindowID(1), browser.Bounds{
-		Width:  &width,
-		Height: &height,
-	}))
+	if err := c.Emulation.SetDeviceMetricsOverride(ctx, emulation.NewSetDeviceMetricsOverrideArgs(width, height, 1, false)); err != nil {
+		return nil, err
+	}
 
 	domContent, err := c.Page.DOMContentEventFired(ctx)
 	if err != nil {
@@ -42,6 +44,10 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 
 	frame, err := c.Page.Navigate(ctx, page.NewNavigateArgs(url))
 	if err != nil {
+		return nil, err
+	}
+
+	if err := c.Page.BringToFront(ctx); err != nil {
 		return nil, err
 	}
 
@@ -60,9 +66,7 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	case <-ctx.Done():
 	}
 
-	// use a new context to make sure the screenshot is taken even if
-	// the page is not fully loaded
-	screenshot, err := c.Page.CaptureScreenshot(context.Background(), page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
+	screenshot, err := c.Page.CaptureScreenshot(ctx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
 		X:      0,
 		Y:      0,
 		Width:  float64(width),

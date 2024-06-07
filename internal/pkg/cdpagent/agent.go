@@ -7,26 +7,22 @@ import (
 	"github.com/mafredri/cdp"
 	"github.com/mafredri/cdp/devtool"
 	"github.com/mafredri/cdp/protocol/dom"
-	"github.com/mafredri/cdp/protocol/target"
 	"github.com/mafredri/cdp/rpcc"
 )
 
 type Agent struct {
 	Client     *cdp.Client
-	timeoutSec time.Duration
-	closeConn  func() error
+	targetID   string
+	timeoutSec int
 }
 
-func newAgent(url string, timeoutSec time.Duration) (*Agent, error) {
+func newAgent(url string, timeoutSec int) (*Agent, error) {
 	ctx := context.Background()
 
 	devt := devtool.New(url)
-	pt, err := devt.Get(ctx, devtool.Page)
+	pt, err := devt.Create(ctx)
 	if err != nil {
-		pt, err = devt.Create(ctx)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	conn, err := rpcc.DialContext(ctx, pt.WebSocketDebuggerURL)
@@ -48,33 +44,19 @@ func newAgent(url string, timeoutSec time.Duration) (*Agent, error) {
 		return nil, err
 	}
 
-	// open new tab
-	newTarget, err := c.Target.CreateTarget(ctx, target.NewCreateTargetArgs(url))
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	// attach to the new tab
-	if _, err := c.Target.AttachToTarget(ctx, target.NewAttachToTargetArgs(newTarget.TargetID)); err != nil {
-		conn.Close()
-		return nil, err
-	}
-
 	agent := &Agent{
 		Client:     c,
+		targetID:   pt.ID,
 		timeoutSec: timeoutSec,
-		closeConn:  conn.Close,
 	}
 
 	return agent, nil
 }
 
-func (agent *Agent) GetContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), agent.timeoutSec)
+func (agent *Agent) CreateContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), time.Duration(agent.timeoutSec)*time.Second)
 }
 
 func (agent *Agent) close() error {
-	agent.closeConn()
-	return agent.Client.Browser.Close(context.Background())
+	return agent.Client.Page.Close(context.Background())
 }

@@ -18,7 +18,7 @@ type PoolAgentInfo struct {
 	currentInUse bool
 	usedTimes    int
 	maxUsedTimes int
-	timeoutSec   time.Duration
+	timeoutSec   int
 }
 
 type Pool struct {
@@ -31,7 +31,7 @@ type InitPoolConfig struct {
 	URL          string
 	Count        int
 	MaxUsedTimes int
-	Timeout      time.Duration
+	TimeoutSec   int
 }
 
 func InitPool(configs []*InitPoolConfig) (*Pool, error) {
@@ -51,7 +51,7 @@ func InitPool(configs []*InitPoolConfig) (*Pool, error) {
 	for _, config := range configs {
 		for i := 0; i < config.Count; i++ {
 			fmt.Printf("create agent #%d of %s\n", i, config.URL)
-			agent, err := newAgent(config.URL, config.Timeout)
+			agent, err := newAgent(config.URL, config.TimeoutSec)
 			if err != nil {
 				return nil, err
 			}
@@ -63,7 +63,7 @@ func InitPool(configs []*InitPoolConfig) (*Pool, error) {
 				currentInUse: false,
 				usedTimes:    0,
 				maxUsedTimes: config.MaxUsedTimes,
-				timeoutSec:   config.Timeout,
+				timeoutSec:   config.TimeoutSec,
 			}
 			pool.available <- key
 		}
@@ -122,4 +122,14 @@ func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo) error {
 	pool.available <- agent.key
 	fmt.Printf("release agent %s\n", agent.key)
 	return nil
+}
+
+func (pool *Pool) Dispose() {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	for _, agent := range pool.agents {
+		fmt.Printf("dispose agent %s\n", agent.key)
+		agent.Agent.close()
+	}
 }
