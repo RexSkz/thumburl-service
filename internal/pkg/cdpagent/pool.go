@@ -82,7 +82,7 @@ func (pool *Pool) GetAgent() (*PoolAgentInfo, error) {
 		if agent == nil {
 			return nil, errors.New("agent not found")
 		} else {
-			fmt.Printf("get agent %s\n", key)
+			fmt.Printf("got agent %s\n", key)
 		}
 		agent.currentInUse = true
 		agent.usedTimes++
@@ -120,7 +120,7 @@ func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo) error {
 	}
 
 	pool.available <- agent.key
-	fmt.Printf("release agent %s\n", agent.key)
+	fmt.Printf("released agent %s\n", agent.key)
 	return nil
 }
 

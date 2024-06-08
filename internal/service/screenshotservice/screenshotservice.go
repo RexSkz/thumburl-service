@@ -1,8 +1,10 @@
 package screenshotservice
 
 import (
+	"fmt"
 	"thumburl-service/internal/config"
 	"thumburl-service/internal/pkg/cdpagent"
+	"thumburl-service/internal/pkg/lockmap"
 
 	"github.com/mafredri/cdp/protocol/css"
 	"github.com/mafredri/cdp/protocol/emulation"
@@ -35,6 +37,7 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	if err := c.Emulation.SetDeviceMetricsOverride(ctx, emulation.NewSetDeviceMetricsOverrideArgs(width, height, 1, false)); err != nil {
 		return nil, err
 	}
+	fmt.Printf("set device metrics override %d %d\n", width, height)
 
 	domContent, err := c.Page.DOMContentEventFired(ctx)
 	if err != nil {
@@ -46,10 +49,7 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if err := c.Page.BringToFront(ctx); err != nil {
-		return nil, err
-	}
+	fmt.Printf("navigated to %s\n", url)
 
 	styleSheet, err := c.CSS.CreateStyleSheet(ctx, css.NewCreateStyleSheetArgs(frame.FrameID))
 	if err != nil {
@@ -59,12 +59,25 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	if _, err := c.CSS.SetStyleSheetText(ctx, css.NewSetStyleSheetTextArgs(styleSheet.StyleSheetID, injectedCSS)); err != nil {
 		return nil, err
 	}
+	fmt.Printf("injected css\n")
 
 	// wait until the DOM content is loaded, or timeout
 	select {
 	case <-domContent.Ready():
+		fmt.Printf("dom content ready\n")
+		break
 	case <-ctx.Done():
+		fmt.Printf("timeout waiting for dom content\n")
+		break
 	}
+
+	lockmap.Lock(agent.Agent.DevToolURL)
+	defer lockmap.Unlock(agent.Agent.DevToolURL)
+
+	if err := c.Page.BringToFront(ctx); err != nil {
+		return nil, err
+	}
+	fmt.Printf("bring to front\n")
 
 	screenshot, err := c.Page.CaptureScreenshot(ctx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
 		X:      0,
@@ -76,6 +89,7 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("captured screenshot\n")
 
 	return screenshot.Data, nil
 }

@@ -12,6 +12,7 @@ import (
 
 type Agent struct {
 	Client     *cdp.Client
+	DevToolURL string
 	targetID   string
 	timeoutSec int
 }
@@ -46,6 +47,7 @@ func newAgent(url string, timeoutSec int) (*Agent, error) {
 
 	agent := &Agent{
 		Client:     c,
+		DevToolURL: url,
 		targetID:   pt.ID,
 		timeoutSec: timeoutSec,
 	}
@@ -55,6 +57,10 @@ func newAgent(url string, timeoutSec int) (*Agent, error) {
 
 func (agent *Agent) CreateContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), time.Duration(agent.timeoutSec)*time.Second)
+}
+
+func (agent *Agent) GetTargetID() string {
+	return agent.targetID
 }
 
 func (agent *Agent) close() error {
