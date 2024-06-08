@@ -2,6 +2,7 @@ package screenshotservice
 
 import (
 	"fmt"
+
 	"thumburl-service/internal/config"
 	"thumburl-service/internal/pkg/cdpagent"
 	"thumburl-service/internal/pkg/lockmap"
@@ -28,7 +29,7 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer pool.ReleaseAgent(agent)
+	defer pool.ReleaseAgent(agent, false)
 	c := agent.Agent.Client
 
 	ctx, cancel := agent.Agent.CreateContext()
@@ -53,10 +54,12 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 
 	styleSheet, err := c.CSS.CreateStyleSheet(ctx, css.NewCreateStyleSheetArgs(frame.FrameID))
 	if err != nil {
+		pool.ReleaseAgent(agent, true)
 		return nil, err
 	}
 	injectedCSS := "::-webkit-scrollbar { display: none; }"
 	if _, err := c.CSS.SetStyleSheetText(ctx, css.NewSetStyleSheetTextArgs(styleSheet.StyleSheetID, injectedCSS)); err != nil {
+		pool.ReleaseAgent(agent, true)
 		return nil, err
 	}
 	fmt.Printf("injected css\n")
@@ -67,17 +70,13 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 		fmt.Printf("dom content ready\n")
 		break
 	case <-ctx.Done():
-		fmt.Printf("timeout waiting for dom content\n")
+		pool.ReleaseAgent(agent, true)
+		fmt.Printf("timeout\n")
 		break
 	}
 
 	lockmap.Lock(agent.Agent.DevToolURL)
 	defer lockmap.Unlock(agent.Agent.DevToolURL)
-
-	if err := c.Page.BringToFront(ctx); err != nil {
-		return nil, err
-	}
-	fmt.Printf("bring to front\n")
 
 	screenshot, err := c.Page.CaptureScreenshot(ctx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
 		X:      0,
@@ -87,6 +86,7 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 		Scale:  1,
 	}))
 	if err != nil {
+		pool.ReleaseAgent(agent, true)
 		return nil, err
 	}
 	fmt.Printf("captured screenshot\n")

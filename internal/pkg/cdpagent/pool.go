@@ -92,13 +92,13 @@ func (pool *Pool) GetAgent() (*PoolAgentInfo, error) {
 	}
 }
 
-func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo) error {
+func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo, force bool) error {
 	if !agent.currentInUse {
 		return errors.New("agent is not in use")
 	}
 	agent.currentInUse = false
 
-	if agent.usedTimes > agent.maxUsedTimes {
+	if agent.usedTimes > agent.maxUsedTimes || force {
 		nextAgent, err := newAgent(agent.url, agent.timeoutSec)
 		if err != nil {
 			return errors.Wrap(err, "failed to release agent")
@@ -120,7 +120,11 @@ func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo) error {
 	}
 
 	pool.available <- agent.key
-	fmt.Printf("released agent %s\n", agent.key)
+	if force {
+		fmt.Printf("force released agent %s\n", agent.key)
+	} else {
+		fmt.Printf("released agent %s\n", agent.key)
+	}
 	return nil
 }
 
