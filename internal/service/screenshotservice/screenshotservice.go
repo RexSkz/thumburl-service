@@ -1,11 +1,12 @@
 package screenshotservice
 
 import (
-	"fmt"
+	"context"
 
 	"thumburl-service/internal/config"
 	"thumburl-service/internal/pkg/cdpagent"
 	"thumburl-service/internal/pkg/lockmap"
+	"thumburl-service/internal/pkg/logger"
 
 	"github.com/mafredri/cdp/protocol/css"
 	"github.com/mafredri/cdp/protocol/emulation"
@@ -20,65 +21,85 @@ func InitPool() error {
 	return err
 }
 
-func Dispose() {
+func DisposePool() {
 	pool.Dispose()
 }
 
-func ScreenShot(url string, width int, height int) ([]byte, error) {
-	agent, err := pool.GetAgent()
+func ScreenShot(ctx context.Context, url string, width int, height int) ([]byte, error) {
+	agent, err := pool.GetAgent(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer pool.ReleaseAgent(agent, false)
+	defer pool.ReleaseAgent(ctx, agent, false)
 	c := agent.Agent.Client
 
-	ctx, cancel := agent.Agent.CreateContext()
-	defer cancel()
+	agentCtx, cancelAgentCtx := agent.Agent.CreateContext()
+	defer cancelAgentCtx()
 
-	if err := c.Emulation.SetDeviceMetricsOverride(ctx, emulation.NewSetDeviceMetricsOverrideArgs(width, height, 1, false)); err != nil {
+	if err := c.Emulation.SetDeviceMetricsOverride(agentCtx, emulation.NewSetDeviceMetricsOverrideArgs(width, height, 1, false)); err != nil {
 		return nil, err
 	}
-	fmt.Printf("set device metrics override %d %d\n", width, height)
+	logger.Infow(
+		ctx,
+		"device metrics override",
+		"width", width,
+		"height", height,
+	)
 
-	domContent, err := c.Page.DOMContentEventFired(ctx)
+	domContent, err := c.Page.DOMContentEventFired(agentCtx)
 	if err != nil {
 		return nil, err
 	}
 	defer domContent.Close()
 
-	frame, err := c.Page.Navigate(ctx, page.NewNavigateArgs(url))
+	frame, err := c.Page.Navigate(agentCtx, page.NewNavigateArgs(url))
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("navigated to %s\n", url)
+	logger.Infow(
+		ctx,
+		"navigated",
+		"url", url,
+	)
 
-	styleSheet, err := c.CSS.CreateStyleSheet(ctx, css.NewCreateStyleSheetArgs(frame.FrameID))
+	styleSheet, err := c.CSS.CreateStyleSheet(agentCtx, css.NewCreateStyleSheetArgs(frame.FrameID))
 	if err != nil {
-		pool.ReleaseAgent(agent, true)
+		pool.ReleaseAgent(ctx, agent, true)
 		return nil, err
 	}
 	injectedCSS := "::-webkit-scrollbar { display: none; }"
-	if _, err := c.CSS.SetStyleSheetText(ctx, css.NewSetStyleSheetTextArgs(styleSheet.StyleSheetID, injectedCSS)); err != nil {
-		pool.ReleaseAgent(agent, true)
+	if _, err := c.CSS.SetStyleSheetText(agentCtx, css.NewSetStyleSheetTextArgs(styleSheet.StyleSheetID, injectedCSS)); err != nil {
+		pool.ReleaseAgent(ctx, agent, true)
 		return nil, err
 	}
-	fmt.Printf("injected css\n")
+	logger.Infow(
+		ctx,
+		"css injected",
+		"stylesheet_id", styleSheet.StyleSheetID,
+	)
 
 	// wait until the DOM content is loaded, or timeout
 	select {
 	case <-domContent.Ready():
-		fmt.Printf("dom content ready\n")
+		logger.Infow(
+			ctx,
+			"dom content ready",
+		)
 		break
-	case <-ctx.Done():
-		pool.ReleaseAgent(agent, true)
-		fmt.Printf("timeout\n")
+	case <-agentCtx.Done():
+		logger.Infow(
+			ctx,
+			"timeout loading dom content",
+		)
+		pool.ReleaseAgent(ctx, agent, true)
 		break
 	}
 
-	lockmap.Lock(agent.Agent.DevToolURL)
-	defer lockmap.Unlock(agent.Agent.DevToolURL)
+	// for chromium, c.Page.CaptureScreenshot is not thread-safe
+	lockmap.Lock(ctx, agent.Agent.DevToolURL)
+	defer lockmap.Unlock(ctx, agent.Agent.DevToolURL)
 
-	screenshot, err := c.Page.CaptureScreenshot(ctx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
+	screenshot, err := c.Page.CaptureScreenshot(agentCtx, page.NewCaptureScreenshotArgs().SetFormat("webp").SetClip(page.Viewport{
 		X:      0,
 		Y:      0,
 		Width:  float64(width),
@@ -86,10 +107,14 @@ func ScreenShot(url string, width int, height int) ([]byte, error) {
 		Scale:  1,
 	}))
 	if err != nil {
-		pool.ReleaseAgent(agent, true)
+		pool.ReleaseAgent(ctx, agent, true)
 		return nil, err
 	}
-	fmt.Printf("captured screenshot\n")
+	logger.Infow(
+		ctx,
+		"screenshot captured",
+		"size_bytes", len(screenshot.Data),
+	)
 
 	return screenshot.Data, nil
 }

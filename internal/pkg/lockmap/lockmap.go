@@ -1,14 +1,16 @@
 package lockmap
 
 import (
-	"fmt"
+	"context"
 	"sync"
+
+	"thumburl-service/internal/pkg/logger"
 )
 
 var globalMutex sync.RWMutex
 var lockMap = make(map[string]*sync.Mutex)
 
-func Lock(key string) {
+func Lock(ctx context.Context, key string) {
 	globalMutex.RLock()
 
 	if lock, ok := lockMap[key]; ok {
@@ -22,10 +24,14 @@ func Lock(key string) {
 		globalMutex.Unlock()
 	}
 
-	fmt.Printf("locked %s\n", key)
+	logger.Infow(
+		ctx,
+		"devtool action locked",
+		"key", key,
+	)
 }
 
-func Unlock(key string) {
+func Unlock(ctx context.Context, key string) {
 	globalMutex.RLock()
 
 	if _, ok := lockMap[key]; ok {
@@ -33,5 +39,10 @@ func Unlock(key string) {
 	}
 
 	globalMutex.RUnlock()
-	fmt.Printf("unlocked %s\n", key)
+
+	logger.Infow(
+		ctx,
+		"devtool action unlocked",
+		"key", key,
+	)
 }

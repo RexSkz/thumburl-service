@@ -25,7 +25,7 @@ func GetScreenShot(c *gin.Context) {
 		return
 	}
 
-	data, err := screenshotservice.ScreenShot(req.URL, req.Width, req.Height)
+	data, err := screenshotservice.ScreenShot(c, req.URL, req.Width, req.Height)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return

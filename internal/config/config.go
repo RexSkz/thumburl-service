@@ -1,10 +1,19 @@
 package config
 
 import (
-	"thumburl-service/internal/pkg/cdpagent"
+	"time"
 )
 
-var PoolConfig = []*cdpagent.InitPoolConfig{
+type InitPoolConfig struct {
+	URL          string
+	Count        int
+	MaxUsedTimes int
+	TimeoutSec   int
+}
+
+const Port = ":8080"
+
+var PoolConfig = []*InitPoolConfig{
 	{
 		URL:          "http://localhost:9222",
 		Count:        10,
@@ -12,3 +21,5 @@ var PoolConfig = []*cdpagent.InitPoolConfig{
 		TimeoutSec:   10,
 	},
 }
+
+const GetAgentTimeout = 5 * time.Second

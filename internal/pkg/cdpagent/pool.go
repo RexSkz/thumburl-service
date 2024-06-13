@@ -1,10 +1,13 @@
 package cdpagent
 
 import (
-	"fmt"
+	"context"
 	"strconv"
 	"sync"
 	"time"
+
+	"thumburl-service/internal/config"
+	"thumburl-service/internal/pkg/logger"
 
 	"github.com/pkg/errors"
 )
@@ -27,14 +30,7 @@ type Pool struct {
 	available chan agentKey
 }
 
-type InitPoolConfig struct {
-	URL          string
-	Count        int
-	MaxUsedTimes int
-	TimeoutSec   int
-}
-
-func InitPool(configs []*InitPoolConfig) (*Pool, error) {
+func InitPool(configs []*config.InitPoolConfig) (*Pool, error) {
 	var pool = new(Pool)
 
 	totalAgents := 0
@@ -50,10 +46,9 @@ func InitPool(configs []*InitPoolConfig) (*Pool, error) {
 
 	for _, config := range configs {
 		for i := 0; i < config.Count; i++ {
-			fmt.Printf("create agent #%d of %s\n", i, config.URL)
 			agent, err := newAgent(config.URL, config.TimeoutSec)
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, "failed to create agent")
 			}
 			key := agentKey(config.URL + "/" + strconv.Itoa(i))
 			pool.agents[key] = &PoolAgentInfo{
@@ -66,13 +61,20 @@ func InitPool(configs []*InitPoolConfig) (*Pool, error) {
 				timeoutSec:   config.TimeoutSec,
 			}
 			pool.available <- key
+			logger.Infow(
+				context.Background(),
+				"created agent",
+				"index", i,
+				"url", config.URL,
+				"key", key,
+			)
 		}
 	}
 
 	return pool, nil
 }
 
-func (pool *Pool) GetAgent() (*PoolAgentInfo, error) {
+func (pool *Pool) GetAgent(ctx context.Context) (*PoolAgentInfo, error) {
 	select {
 	case key := <-pool.available:
 		pool.mu.RLock()
@@ -80,28 +82,33 @@ func (pool *Pool) GetAgent() (*PoolAgentInfo, error) {
 		pool.mu.RUnlock()
 
 		if agent == nil {
-			return nil, errors.New("agent not found")
+			return nil, errors.New("agent '" + string(key) + "' not found")
 		} else {
-			fmt.Printf("got agent %s\n", key)
+			logger.Infow(
+				ctx,
+				"agent retrieved",
+				"key", key,
+				"remain", len(pool.available),
+			)
 		}
 		agent.currentInUse = true
 		agent.usedTimes++
 		return agent, nil
-	case <-time.After(5 * time.Second):
-		return nil, errors.New("timeout to get agent")
+	case <-time.After(config.GetAgentTimeout):
+		return nil, errors.New("get agent timeout, no agent is released")
 	}
 }
 
-func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo, force bool) error {
+func (pool *Pool) ReleaseAgent(ctx context.Context, agent *PoolAgentInfo, force bool) error {
 	if !agent.currentInUse {
-		return errors.New("agent is not in use")
+		return errors.New("agent '" + string(agent.key) + "' is not in use")
 	}
 	agent.currentInUse = false
 
 	if agent.usedTimes > agent.maxUsedTimes || force {
 		nextAgent, err := newAgent(agent.url, agent.timeoutSec)
 		if err != nil {
-			return errors.Wrap(err, "failed to release agent")
+			return errors.Wrap(err, "release agent failed")
 		}
 
 		pool.agents[agent.key].Agent.close()
@@ -121,9 +128,17 @@ func (pool *Pool) ReleaseAgent(agent *PoolAgentInfo, force bool) error {
 
 	pool.available <- agent.key
 	if force {
-		fmt.Printf("force released agent %s\n", agent.key)
+		logger.Infow(
+			ctx,
+			"agent force released",
+			"key", agent.key,
+		)
 	} else {
-		fmt.Printf("released agent %s\n", agent.key)
+		logger.Infow(
+			ctx,
+			"agent released",
+			"key", agent.key,
+		)
 	}
 	return nil
 }
@@ -133,7 +148,19 @@ func (pool *Pool) Dispose() {
 	defer pool.mu.Unlock()
 
 	for _, agent := range pool.agents {
-		fmt.Printf("dispose agent %s\n", agent.key)
-		agent.Agent.close()
+		if err := agent.Agent.close(); err != nil {
+			logger.Errorw(
+				context.Background(),
+				"dispose agent failed",
+				"key", agent.key,
+				"error", err,
+			)
+		} else {
+			logger.Infow(
+				context.Background(),
+				"disposed agent",
+				"key", agent.key,
+			)
+		}
 	}
 }
