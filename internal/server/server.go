@@ -15,6 +15,8 @@ import (
 )
 
 func Start() {
+	config.Init()
+
 	if err := screenshotservice.InitPool(); err != nil {
 		logger.Panicw(
 			context.Background(),
@@ -50,5 +52,5 @@ func Start() {
 	r.GET(h.GetScreenShotEndpoint, h.GetScreenShot)
 
 	r.SetTrustedProxies(nil)
-	r.Run(config.Port)
+	r.Run(config.Config.Port)
 }

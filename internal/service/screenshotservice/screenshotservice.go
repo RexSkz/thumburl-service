@@ -16,7 +16,7 @@ import (
 var pool *cdpagent.Pool
 
 func InitPool() error {
-	p, err := cdpagent.InitPool(config.PoolConfig)
+	p, err := cdpagent.InitPool(config.Config.PoolConfig)
 	pool = p
 	return err
 }

@@ -30,7 +30,7 @@ type Pool struct {
 	available chan agentKey
 }
 
-func InitPool(configs []*config.InitPoolConfig) (*Pool, error) {
+func InitPool(configs []*config.PoolConfig) (*Pool, error) {
 	var pool = new(Pool)
 
 	totalAgents := 0
@@ -75,6 +75,7 @@ func InitPool(configs []*config.InitPoolConfig) (*Pool, error) {
 }
 
 func (pool *Pool) GetAgent(ctx context.Context) (*PoolAgentInfo, error) {
+	timeoutSec := time.Second * time.Duration(config.Config.GetAgentTimeoutSec)
 	select {
 	case key := <-pool.available:
 		pool.mu.RLock()
@@ -94,7 +95,7 @@ func (pool *Pool) GetAgent(ctx context.Context) (*PoolAgentInfo, error) {
 		agent.currentInUse = true
 		agent.usedTimes++
 		return agent, nil
-	case <-time.After(config.GetAgentTimeout):
+	case <-time.After(timeoutSec):
 		return nil, errors.New("get agent timeout, no agent is released")
 	}
 }

@@ -1,0 +1,12 @@
+{
+    "port": ":8080",
+    "pool_config": [
+        {
+            "url": "http://localhost:9222",
+            "count": 10,
+            "max_used_times": 20,
+            "timeout_sec": 10
+        }
+    ],
+    "get_agent_timeout_sec": 5
+}
