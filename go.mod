@@ -8,6 +8,7 @@ require (
 	github.com/chai2010/webp v1.1.1
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0
+	github.com/jonlaing/htmlmeta v0.0.0-20151027182219-aa8670c4f78c
 	github.com/mafredri/cdp v0.34.1
 	github.com/pkg/errors v0.9.1
 	go.uber.org/zap v1.27.0

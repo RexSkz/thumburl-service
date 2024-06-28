@@ -50,6 +50,7 @@ func Start() {
 	)
 
 	r.GET(h.GetScreenShotEndpoint, h.GetScreenShot)
+	r.GET(h.GetMetaEndpoint, h.GetMeta)
 
 	r.SetTrustedProxies(nil)
 	r.Run(config.Config.Port)
