@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"thumburl-service/internal/config"
 	h "thumburl-service/internal/handler"
@@ -26,7 +27,7 @@ func Start() {
 	}
 
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-c
 		logger.Infow(

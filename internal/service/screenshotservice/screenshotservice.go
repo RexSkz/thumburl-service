@@ -116,5 +116,11 @@ func ScreenShot(ctx context.Context, url string, width int, height int) ([]byte,
 		"size_bytes", len(screenshot.Data),
 	)
 
+	c.Page.Navigate(ctx, page.NewNavigateArgs("about:blank"))
+	logger.Infow(
+		ctx,
+		"re-navigate to blank page",
+	)
+
 	return screenshot.Data, nil
 }

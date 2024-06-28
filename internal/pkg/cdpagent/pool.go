@@ -107,6 +107,11 @@ func (pool *Pool) ReleaseAgent(ctx context.Context, agent *PoolAgentInfo, force 
 	agent.currentInUse = false
 
 	if agent.usedTimes > agent.maxUsedTimes || force {
+		logger.Infow(
+			ctx,
+			"agent is overused, replace it before releasing",
+		)
+
 		nextAgent, err := newAgent(agent.url, agent.timeoutSec)
 		if err != nil {
 			return errors.Wrap(err, "release agent failed")
